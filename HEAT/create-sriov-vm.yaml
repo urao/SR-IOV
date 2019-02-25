@@ -1,0 +1,216 @@
+heat_template_version: 2015-04-30
+
+description: Bring up Ubuntu VM in SR-IOV mode deployment of OpenStack+Contrail
+
+parameters:
+
+  mgmt_network_name:
+    type: string
+    description: Mgmt network name 
+
+  sriov_network_name:
+    type: string
+    description: Single network for both Left and Right interfaces in my setup
+
+  sriov_vn_prefix:
+    type: string
+    description: Prefix of the Virtual Network
+
+  sriov_vn_prefix_len:
+    type: number
+    description: Prefix length of the Virtual Network
+
+  mgmt_vn_prefix:
+    type: string
+    description: Prefix of the Mgmt Virtual Network
+
+  mgmt_vn_prefix_len:
+    type: number
+    description: Prefix length of the Mgmt  Virtual Network
+
+  provider_segmentation_id:
+    type: number
+    description: Provider segmentation id
+
+  provider_physical_network:
+    type: string
+    description: Provider physical network
+
+  vnic_key:
+    type: string
+    description: Port binding key 
+
+  vnic_value:
+    type: string
+    description: Port binding key value
+
+  sriov_left_intf_ip:
+    type: string
+    description: Fixed Instance IP address for Left Interface(DUMMY IP)
+    default: "99.99.1.10"
+
+## VM/NovaServer Parameters
+  vnf_name:
+    type: string
+    description: Unique name for VNF(vSRX) instance
+
+  vnf_image_name:
+    type: string
+    description: VNF image name
+
+  vnf_flavor_name:
+    type: string
+    description: VNF flavor name 
+
+resources:
+
+  template_NetworkIpam_1:
+    type: OS::ContrailV2::NetworkIpam
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_ipam_mgmt"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+
+  template_VirtualNetwork_1:
+    type: OS::ContrailV2::VirtualNetwork
+    depends_on: [ template_NetworkIpam_1 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_%var2%"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+            '%var2%': { get_param: mgmt_network_name }
+      network_ipam_refs: [{ get_resource: template_NetworkIpam_1 }]
+      network_ipam_refs_data:
+        [{
+          network_ipam_refs_data_ipam_subnets:
+            [{
+              network_ipam_refs_data_ipam_subnets_subnet:
+                {
+                  network_ipam_refs_data_ipam_subnets_subnet_ip_prefix: { get_param: mgmt_vn_prefix },
+                  network_ipam_refs_data_ipam_subnets_subnet_ip_prefix_len: { get_param: mgmt_vn_prefix_len },
+                },
+              network_ipam_refs_data_ipam_subnets_addr_from_start: true
+            }]
+         }]
+
+  template_VirtualMachineInterface_1:
+    type: OS::ContrailV2::VirtualMachineInterface
+    depends_on: [ template_VirtualNetwork_1 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_vmi_mgmt"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+      virtual_network_refs: [{ list_join: [':', { get_attr: [ template_VirtualNetwork_1, fq_name ] } ] }]
+
+  template_InstanceIp_1:
+    type: OS::ContrailV2::InstanceIp
+    depends_on: [ template_VirtualMachineInterface_1, template_VirtualNetwork_1 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_iip_mgmt"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+      virtual_machine_interface_refs: [{ get_resource: template_VirtualMachineInterface_1 }]
+      virtual_network_refs: [{ list_join: [':', { get_attr: [ template_VirtualNetwork_1, fq_name ] } ] }]
+
+  template_NetworkIpam_2:
+    type: OS::ContrailV2::NetworkIpam
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_ipam_sriov"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+
+  template_VirtualNetwork_2:
+    type: OS::ContrailV2::VirtualNetwork
+    depends_on: [ template_NetworkIpam_2 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_%var2%"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+            '%var2%': { get_param: sriov_network_name }
+      provider_properties:
+        {
+          provider_properties_segmentation_id: { get_param: provider_segmentation_id },
+          provider_properties_physical_network: { get_param: provider_physical_network },
+        }
+      network_ipam_refs: [{ get_resource: template_NetworkIpam_2 }]
+      network_ipam_refs_data:
+        [{
+          network_ipam_refs_data_ipam_subnets:
+            [{
+              network_ipam_refs_data_ipam_subnets_subnet:
+                {
+                  network_ipam_refs_data_ipam_subnets_subnet_ip_prefix: { get_param: sriov_vn_prefix },
+                  network_ipam_refs_data_ipam_subnets_subnet_ip_prefix_len: { get_param: sriov_vn_prefix_len },
+                },
+              network_ipam_refs_data_ipam_subnets_enable_dhcp: false,
+              network_ipam_refs_data_ipam_subnets_addr_from_start: true
+            }]
+         }]
+
+  template_VirtualMachineInterface_2_1:
+    type: OS::ContrailV2::VirtualMachineInterface
+    depends_on: [ template_VirtualNetwork_2 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_vmi_sriov_left_right"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+      virtual_machine_interface_bindings:
+        {
+          virtual_machine_interface_bindings_key_value_pair:
+            [{
+              virtual_machine_interface_bindings_key_value_pair_key: { get_param: vnic_key },
+              virtual_machine_interface_bindings_key_value_pair_value: { get_param: vnic_value },
+            }],
+        }
+      virtual_network_refs: [{ list_join: [':', { get_attr: [ template_VirtualNetwork_2, fq_name ] } ] }]
+
+
+  template_InstanceIp2_1:
+    type: OS::ContrailV2::InstanceIp
+    depends_on: [ template_VirtualMachineInterface_2_1, template_VirtualNetwork_2 ]
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_iip_sriov_left_right"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+      virtual_machine_interface_refs: [{ get_resource: template_VirtualMachineInterface_2_1 }]
+      virtual_network_refs: [{ list_join: [':', { get_attr: [ template_VirtualNetwork_2, fq_name ] } ] }]
+      instance_ip_address: { get_param: sriov_left_intf_ip }
+
+  vnf_instance:
+    type: OS::Nova::Server
+    properties:
+      name:
+        str_replace:
+          template: "%var1%_%var2%"
+          params:
+            '%var1%': {get_param: 'OS::stack_name'}
+            '%var2%': {get_param: vnf_name }
+      image: { get_param: vnf_image_name }
+      flavor: {get_param: vnf_flavor_name}
+      networks:
+        - port: { get_resource: template_VirtualMachineInterface_1 }
+        - port: { get_resource: template_VirtualMachineInterface_2_1 }
+
+outputs:
+  instance_name:
+    description: Name of the instance
+    value: { get_attr: [vnf_instance, name] }
+  instance_ip1:
+    description: First interface IP address of the instance
+    value: { get_attr: [vnf_instance, addresses] }
