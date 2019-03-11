@@ -1,7 +1,7 @@
 ## Steps to create VM on SRIOV-Compute node
-1.) Assuming the deployment is running Contrail5.0.2+Openstack(Queen)
-2.) Create a flavor of type small, and upload image(driver installed) onto Glance  
-3.) Run below commands
+1) Assuming the deployment is running Contrail5.0.2+Openstack(Queens)
+2) Create a flavor of type small, and upload image(driver installed) onto Glance  
+3) Execute below commands
 ```
 source .op/bin/activate
 source /etc/kolla/kolla-toolbox/admin-openrc.sh
