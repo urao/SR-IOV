@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Tested on Centos 7 and Ubuntu 16.04
 
 set -e
 
