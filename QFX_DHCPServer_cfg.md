@@ -1,5 +1,6 @@
-## Sample QFX-5100 DHCPServer configuration
-1.) Below condifuration helps to assign IP address to SRIOV VM interfaces
+## Sample QFX-5100 DHCP Server configuration
+
+1) Below configuration helps to assign IP address to SRIOV VM interfaces via DHCP
 ```
 set system services dhcp-local-server group server1 interface xe-0/0/0.0
 set interfaces xe-0/0/0 unit 0 family inet address 10.0.33.1/24
